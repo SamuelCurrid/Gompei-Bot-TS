@@ -1,29 +1,30 @@
 import { Awaited, ClientEvents, Message } from "discord.js";
 import { GompeiClient } from "../client";
-import { Thisify } from "../util/types";
 
-export type TextCommandContext = Message;
+export interface TextCommandContext extends Message {
+    argumentContent: string;
+}
 
-interface TextCommandInfo<TState, UseThis extends boolean> {
+interface TextCommandInfo {
     commandName: string;
     aliases?: string[];
     description?: string;
     // Need to do this wonky thing with type parameters so that
     // typescript doesn't try to use the parameter for type inference
-    permissions?: Thisify<UseThis, <T extends TState>(state: T, ctx: TextCommandContext) => Awaited<boolean>>;
-    callback: Thisify<UseThis, <T extends TState>(state: T, ctx: TextCommandContext) => Awaited<void>>;
+    /** Return false if command fails and has no side effects */
+    callback: (ctx: TextCommandContext) => Awaited<boolean | void>;
 }
 
-export interface Plugin<TState, UseThis extends boolean = boolean> {
+export interface PluginInfo {
     name: string;
     description?: string;
-    useThis?: UseThis;
-    init?: (client: GompeiClient) => Awaited<TState>;
-    textCommands?: TextCommandInfo<TState, UseThis>[];
+    textCommands?: TextCommandInfo[];
     slashCommands?: never; // not yet implemented
-    eventListeners?: { [EventName in keyof ClientEvents]: (state: TState, ...args: ClientEvents[EventName]) => Awaited<void> };
+    eventListeners?: { [EventName in keyof ClientEvents]: (...args: ClientEvents[EventName]) => Awaited<void> };
 }
 
-export function makePlugin<T, UseThis extends boolean>(plugin: Plugin<T, UseThis>) {
+export type Plugin = (client: GompeiClient) => PluginInfo;
+
+export function Plugin(plugin: Plugin) {
     return plugin;
 }
