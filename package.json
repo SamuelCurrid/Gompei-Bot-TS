@@ -1,6 +1,7 @@
 {
   "scripts": {
     "build": "tsc",
+    "start": "tsc && node ./dist/index.js",
     "watch": "tsc --watch",
     "dev": "tsc-watch -p tsconfig.json --onSuccess \"node ./dist/index.js\""
   },
