@@ -1,6 +1,7 @@
 import { GuildMember, Invite, Role, TextChannel } from "discord.js";
 import { TextCommandContext } from "../plugins/Plugin";
 import { partition } from "./string";
+import { Split } from "./types";
 
 export class InvalidArgumentError extends TypeError { }
 
@@ -17,10 +18,14 @@ export type ArgumentTypeMap = {
     role: Promise<Role>;
     invite: Promise<Invite>;
 } & {
-    [Key in string as `${typeof EXACT}${Key}` | `${typeof REGEX}/${string}/${string}`]: string;
+    [Key in string as `${typeof REGEX}/${string}/${string}`]: string;
 };
 
-export type ArgumentType = keyof ArgumentTypeMap | RegExp;
+interface IFoo {
+    foo: number;
+}
+
+export type ArgumentType = keyof ArgumentTypeMap | RegExp | `${typeof EXACT}${string}`;
 
 export type ArgumentList = [...Exclude<ArgumentType, 'rest'>[], ...(['rest'] | [])];
 
@@ -29,8 +34,11 @@ export type ParseArgumentsReturnType<T extends ArgumentType[]>
     ? Arg extends keyof ArgumentTypeMap
         // @ts-expect-error Remove this comment once the ts bug gets fixed
         ? [ArgumentTypeMap[Arg], ...ParseArgumentsReturnType<Rest>]
-        // @ts-expect-error Remove this comment once the ts bug gets fixed
-        : [string, ...ParseArgumentsReturnType<Rest>]
+        : Arg extends `${typeof EXACT}${infer Options}`
+            // @ts-expect-error Remove this comment once the ts bug gets fixed
+            ? [Split<Options, '|'>, ...ParseArgumentsReturnType<Rest>]
+            // @ts-expect-error Remove this comment once the ts bug gets fixed
+            : [string, ...ParseArgumentsReturnType<Rest>]
     : [];
 
 export default function parseArgumentsFactory(argumentContent: string) {

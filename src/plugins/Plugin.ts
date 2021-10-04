@@ -1,6 +1,7 @@
 import { Awaited, ClientEvents, Message } from "discord.js";
 import { GompeiClient } from "../client";
 import { ArgumentList, ParseArgumentsReturnType } from "../util/parseCommandArguments";
+import { ClearPromises } from "../util/types";
 
 export interface TextCommandContext extends Message {
     parseArguments<T extends ArgumentList>(this: TextCommandContext, ...types: T): ParseArgumentsReturnType<T>;
