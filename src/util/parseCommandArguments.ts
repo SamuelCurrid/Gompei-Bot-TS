@@ -21,10 +21,6 @@ export type ArgumentTypeMap = {
     [Key in string as `${typeof REGEX}/${string}/${string}`]: string;
 };
 
-interface IFoo {
-    foo: number;
-}
-
 export type ArgumentType = keyof ArgumentTypeMap | RegExp | `${typeof EXACT}${string}`;
 
 export type ArgumentList = [...Exclude<ArgumentType, 'rest'>[], ...(['rest'] | [])];
