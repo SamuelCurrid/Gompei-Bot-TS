@@ -24,22 +24,20 @@ export type ArgumentType = keyof ArgumentTypeMap | RegExp;
 
 export type ArgumentList = [...Exclude<ArgumentType, 'rest'>[], ...(['rest'] | [])];
 
-type ConvertArgumentList<T extends ArgumentType[]>
+export type ParseArgumentsReturnType<T extends ArgumentType[]>
     = T extends [infer Arg, ...infer Rest]
     ? Arg extends keyof ArgumentTypeMap
         // @ts-expect-error Remove this comment once the ts bug gets fixed
-        ? [ArgumentTypeMap[Arg], ...ConvertArgumentList<Rest>]
+        ? [ArgumentTypeMap[Arg], ...ParseArgumentsReturnType<Rest>]
         // @ts-expect-error Remove this comment once the ts bug gets fixed
-        : [string, ...ConvertArgumentList<Rest>]
+        : [string, ...ParseArgumentsReturnType<Rest>]
     : [];
-
-type x = ConvertArgumentList<['string', 'int', 'regex:/abc/i']>
 
 export default function parseArgumentsFactory(argumentContent: string) {
     return function parseArguments<T extends ArgumentList>(
         this: TextCommandContext,
         ...types: T
-    ): ConvertArgumentList<T> {
+    ): ParseArgumentsReturnType<T> {
         let rest = argumentContent;
         const args = [];
         

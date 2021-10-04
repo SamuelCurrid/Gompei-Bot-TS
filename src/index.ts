@@ -43,8 +43,9 @@ client.on('ready', async () => {
                 for (const command of textCommandsLookup[commandName]) {
                     // Run the commands until we get the first blocking (i.e. successful) one.
                     if (await command(Object.assign(msg, {
-                        parseArguments: parseArgumentsFactory(restOfContent)
-                    } as Omit<TextCommandContext, keyof Message>))) {
+                        parseArguments: parseArgumentsFactory(restOfContent),
+                        async parseArgumentsAsync(...args) { return Promise.all(parseArgumentsFactory(restOfContent).apply(this, args)); }
+                    } as TextCommandContext))) {
                         if (process.env.COMMAND_SHADOWING !== false) {
                             break;
                         }

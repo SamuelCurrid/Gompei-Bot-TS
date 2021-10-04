@@ -1,7 +1,5 @@
-import { GuildAuditLogs, GuildAuditLogsEntry, Message, MessageEmbed, Permissions, TextChannel } from "discord.js";
+import { GuildAuditLogs, MessageEmbed, TextChannel } from "discord.js";
 import { Store } from "../storage";
-import { textCommandPrefix } from "../shared";
-import parseCommandArguments from "../util/parseCommandArguments";
 import { isAdmin } from "../util/permsValidator";
 import { Plugin } from "./Plugin";
 
@@ -69,7 +67,7 @@ export default Plugin(client => {
                 commandName: 'logging',
                 check: isAdmin,
                 async callback(ctx) {
-                    const [channel] = await Promise.all(ctx.parseArguments('textChannel'));
+                    const [channel] = await ctx.parseArgumentsAsync('textChannel');
 
                     const guildStore = storage.for(channel.guildId);
 
