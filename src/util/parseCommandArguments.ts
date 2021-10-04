@@ -12,10 +12,10 @@ export type ArgumentTypeMap = {
     int: number;
     string: string;
     rest: string;
-    textChannel: TextChannel;
-    member: GuildMember;
-    role: Role;
-    invite: Invite;
+    textChannel: Promise<TextChannel>;
+    member: Promise<GuildMember>;
+    role: Promise<Role>;
+    invite: Promise<Invite>;
 } & {
     [Key in string as `${typeof EXACT}${Key}` | `${typeof REGEX}/${string}/${string}`]: string;
 };
@@ -35,115 +35,120 @@ type ConvertArgumentList<T extends ArgumentType[]>
 
 type x = ConvertArgumentList<['string', 'int', 'regex:/abc/i']>
 
-export default async function parseCommandArguments<T extends ArgumentList>(
-    ctx: TextCommandContext,
-    ...types: T
-): Promise<ConvertArgumentList<T>> {
-    let rest = ctx.argumentContent;
-    const args = [];
+export default function parseArgumentsFactory(argumentContent: string) {
+    return function parseArguments<T extends ArgumentList>(
+        this: TextCommandContext,
+        ...types: T
+    ): ConvertArgumentList<T> {
+        let rest = argumentContent;
+        const args = [];
+        
+        for (const type of types) {
+            if (type === 'rest') {
+                args.push(rest);
+                break;
+            }
+            if (type === 'string') {
+                // parse strings
+            }
     
-    for (const type of types) {
-        if (type === 'rest') {
-            args.push(rest);
-            break;
-        }
-        if (type === 'string') {
-            // parse strings
-        }
-
-        const [argContent, _rest] = partition(rest, ' ');
-        rest = _rest;
-
-        if (type instanceof RegExp || type.startsWith(REGEX)) {
-            let regexp: RegExp;
-            if (typeof type === 'string') {
-                const [, pattern, flags] = type.split('/');
-                regexp = RegExp(pattern, flags);
-            }
-            else {
-                regexp = type;
-            }
-            if (regexp.test(argContent)) {
-                args.push(argContent);
-                continue;
-            }
-            throw new InvalidArgumentError(`${argContent} does not satisfy ${regexp}`)
-        }
-
-        if (type.startsWith(EXACT)) {
-            const field = type.slice(EXACT.length);
-            if (field.split('|').includes(argContent)) {
-                args.push(argContent);
-                continue;
-            }
-            throw new InvalidArgumentError(`${argContent} is not one of ${field}`);
-        }
-
-        switch (type) {
-            case 'string':
-                // remove once quoted string parsing is written
-                args.push(argContent);
-                continue;
-            case 'number': {
-                const arg = +argContent;
-                if (isNaN(arg)) {
-                    throw new InvalidArgumentError(`${argContent} is not a number`);
+            const [argContent, _rest] = partition(rest, ' ');
+            rest = _rest;
+    
+            if (type instanceof RegExp || type.startsWith(REGEX)) {
+                let regexp: RegExp;
+                if (typeof type === 'string') {
+                    const [, pattern, flags] = type.split('/');
+                    regexp = RegExp(pattern, flags);
                 }
-                args.push(arg);
-                continue;
-            }
-            case 'int': {
-                const arg = +argContent;
-                if (arg % 1 !== 0) {
-                    throw new InvalidArgumentError(`${argContent} is not an integer`);
+                else {
+                    regexp = type;
                 }
-                args.push(arg);
-                continue;
+                if (regexp.test(argContent)) {
+                    args.push(argContent);
+                    continue;
+                }
+                throw new InvalidArgumentError(`${argContent} does not satisfy ${regexp}`)
             }
-            case 'textChannel':
-                args.push(
-                    parseMaybeMention('#', argContent)
-                        .then(x => ctx.guild?.channels.fetch(x) ?? Promise.reject())
-                        .then(ch => ch?.type === 'GUILD_TEXT' ? ch : Promise.reject())
-                        .catch(() => {
-                            throw new InvalidArgumentError(`Channel ${argContent} could not be found`)
-                        })
-                );
-                continue;
-            case 'member':
-                args.push(
-                    parseMaybeMention('@!', argContent)
-                        .catch(() => parseMaybeMention('@', argContent))
-                        .then(x => ctx.guild?.members.fetch(x) ?? Promise.reject())
-                        .catch(() => {
-                            throw new InvalidArgumentError(`Member ${argContent} could not be found`)
-                        })
-                );
-                continue;
-            case 'role':
-                args.push(
-                    parseMaybeMention('@&', argContent)
-                        .then(x => ctx.guild?.roles.fetch(x) ?? Promise.reject())
-                        .catch(() => {
-                            throw new InvalidArgumentError(`Role ${argContent} could not be found`)
-                        })
-                );
-                continue;
-            case 'invite':
-                args.push(
-                    ctx.guild?.invites.fetch(argContent)
-                        .catch(() => {
-                            throw new InvalidArgumentError(`Invite code ${argContent} could not be found`)
-                        })
-                );
-                continue;
+    
+            if (type.startsWith(EXACT)) {
+                const field = type.slice(EXACT.length);
+                if (field.split('|').includes(argContent)) {
+                    args.push(argContent);
+                    continue;
+                }
+                throw new InvalidArgumentError(`${argContent} is not one of ${field}`);
+            }
+    
+            switch (type) {
+                case 'string':
+                    // remove once quoted string parsing is written
+                    args.push(argContent);
+                    continue;
+                case 'number': {
+                    const arg = +argContent;
+                    if (isNaN(arg)) {
+                        throw new InvalidArgumentError(`${argContent} is not a number`);
+                    }
+                    args.push(arg);
+                    continue;
+                }
+                case 'int': {
+                    const arg = +argContent;
+                    if (arg % 1 !== 0) {
+                        throw new InvalidArgumentError(`${argContent} is not an integer`);
+                    }
+                    args.push(arg);
+                    continue;
+                }
+                case 'textChannel':
+                    args.push(
+                        Promise.resolve()
+                            .then(() => parseMaybeMention('#', argContent))
+                            .then(x => this.guild?.channels.fetch(x) ?? Promise.reject())
+                            .then(ch => ch?.type === 'GUILD_TEXT' ? ch : Promise.reject())
+                            .catch(() => {
+                                throw new InvalidArgumentError(`Channel ${argContent} could not be found`)
+                            })
+                    );
+                    continue;
+                case 'member':
+                    args.push(
+                        Promise.resolve()
+                            .then(() => parseMaybeMention('@!', argContent))
+                            .catch(() => parseMaybeMention('@', argContent))
+                            .then(x => this.guild?.members.fetch(x) ?? Promise.reject())
+                            .catch(() => {
+                                throw new InvalidArgumentError(`Member ${argContent} could not be found`)
+                            })
+                    );
+                    continue;
+                case 'role':
+                    args.push(
+                        Promise.resolve()
+                            .then(() => parseMaybeMention('@&', argContent))
+                            .then(x => this.guild?.roles.fetch(x) ?? Promise.reject())
+                            .catch(() => {
+                                throw new InvalidArgumentError(`Role ${argContent} could not be found`)
+                            })
+                    );
+                    continue;
+                case 'invite':
+                    args.push(
+                        this.guild?.invites.fetch(argContent)
+                            .catch(() => {
+                                throw new InvalidArgumentError(`Invite code ${argContent} could not be found`)
+                            })
+                    );
+                    continue;
+            }
         }
+    
+        return args as any;
     }
-
-    return Promise.all(args as any[]) as any;
 }
 
-async function parseMaybeMention(sigil: string, content: string) {
+function parseMaybeMention(sigil: string, content: string) {
     if (!content.startsWith('<')) {
         return content;
     }

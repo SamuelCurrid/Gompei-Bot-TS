@@ -1,0 +1,1 @@
+export const textCommandPrefix = process.env.PREFIX ?? '.';

@@ -3,7 +3,9 @@ import { config } from 'dotenv';
 import { getClient } from './client';
 import logging from './plugins/logging';
 import { Plugin, PluginInfo, TextCommandContext } from './plugins/Plugin';
-import { InvalidArgumentError } from './util/parseCommandArguments';
+import { textCommandPrefix } from './shared';
+import parseArgumentsFactory, { InvalidArgumentError } from './util/parseCommandArguments';
+import { AuthorizationError } from './util/permsValidator';
 import { partition } from './util/string';
 
 // Load .env file
@@ -13,8 +15,6 @@ const { parsed, error } = config({ path: process.argv[2] });
 if (error) {
     throw error;
 }
-
-const textCommandPrefix = process.env.PREFIX ?? '.';
 
 const plugins: Plugin[] = [
     logging
@@ -43,7 +43,7 @@ client.on('ready', async () => {
                 for (const command of textCommandsLookup[commandName]) {
                     // Run the commands until we get the first blocking (i.e. successful) one.
                     if (await command(Object.assign(msg, {
-                        argumentContent: restOfContent
+                        parseArguments: parseArgumentsFactory(restOfContent)
                     } as Omit<TextCommandContext, keyof Message>))) {
                         if (process.env.COMMAND_SHADOWING !== false) {
                             break;
@@ -60,6 +60,8 @@ client.on('ready', async () => {
 
         console.log(`Loading ${plugin.name}...`);
 
+        await plugin.latch;
+
         let count = {
             commands: 0,
             commandNames: 0,
@@ -71,10 +73,14 @@ client.on('ready', async () => {
             for (const command of plugin.textCommands) {
                 const callback = async (ctx: TextCommandContext) => {
                     try {
-                        return await command.callback(ctx) === false;
+                        if (!command.check || await command.check(ctx)) {
+                            await command.callback(ctx);
+                            return true;
+                        }
+                        return false;
                     }
                     catch (e) {
-                        if (e instanceof InvalidArgumentError) {
+                        if ([InvalidArgumentError].some(x => e instanceof x)) {
                             return false;
                         }
                         else {
