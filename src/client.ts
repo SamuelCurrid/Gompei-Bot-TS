@@ -1,4 +1,5 @@
 import { Client, Intents } from "discord.js";
+import { StorageManager } from "./storage";
 
 const allIntents = new Intents(Object.values(Intents.FLAGS));
 
@@ -8,12 +9,16 @@ const nonPrivilegedIntents = allIntents.remove([
 ]);
 
 // As far as plugin code is concerned the client should always be ready.
-export type GompeiClient = Client<true>;
+export interface GompeiClient extends Client<true> {
+    storage: StorageManager;
+}
 
 let client: GompeiClient;
 
 export function getClient() {
-    return (client ??= new Client({
+    return (client ??= Object.assign(new Client<true>({
         intents: allIntents
+    }), {
+        storage: new StorageManager()
     }));
 }

@@ -1,9 +1,12 @@
-import { Awaited, Constants, DiscordAPIError } from 'discord.js';
+import { Awaited, Constants, DiscordAPIError, Message } from 'discord.js';
 import { config } from 'dotenv';
 import { getClient } from './client';
 import logging from './plugins/logging';
-import { Plugin, TextCommandContext } from './plugins/Plugin';
-import { Thisify } from './util/types';
+import { Plugin, PluginInfo, TextCommandContext } from './plugins/Plugin';
+import { textCommandPrefix } from './shared';
+import parseArgumentsFactory, { InvalidArgumentError } from './util/parseCommandArguments';
+import { AuthorizationError } from './util/permsValidator';
+import { partition } from './util/string';
 
 // Load .env file
 // Uses ".env" by default but custom .env file can be loaded.
@@ -13,9 +16,7 @@ if (error) {
     throw error;
 }
 
-const textCommandPrefix = process.env.PREFIX ?? '.';
-
-const plugins: Plugin<any>[] = [
+const plugins: Plugin[] = [
     logging
 ];
 
@@ -36,13 +37,15 @@ client.on('ready', async () => {
     // Text command handling
     client.on('messageCreate', async msg => {
         if (msg.content.startsWith(textCommandPrefix)) {
-            const command = msg.content.slice(textCommandPrefix.length);
-            const [commandName] = command.split(' ', 1);
+            const [commandName, restOfContent] = partition(msg.content.slice(textCommandPrefix.length), ' ');
             
             if (textCommandsLookup[commandName]) {
                 for (const command of textCommandsLookup[commandName]) {
                     // Run the commands until we get the first blocking (i.e. successful) one.
-                    if (await command(msg)) {
+                    if (await command(Object.assign(msg, {
+                        parseArguments: parseArgumentsFactory(restOfContent),
+                        async parseArgumentsAsync(...args) { return Promise.all(parseArgumentsFactory(restOfContent).apply(this, args)); }
+                    } as TextCommandContext))) {
                         if (process.env.COMMAND_SHADOWING !== false) {
                             break;
                         }
@@ -53,16 +56,12 @@ client.on('ready', async () => {
     });
 
     // Load plugins
-    const pluginsWithState = plugins.map(async plugin => {
+    await Promise.allSettled(plugins.map(async pluginFactory => {
+        const plugin = pluginFactory(client);
+
         console.log(`Loading ${plugin.name}...`);
-        return [plugin, await plugin.init?.(client)] as const;
-    });
 
-    await Promise.allSettled(pluginsWithState.map(async p => {
-        const [plugin, state] = await p;
-
-        const thisObj = plugin.useThis ? state : undefined;
-        const stateObj = plugin.useThis ? [] : [state];
+        await plugin.latch;
 
         let count = {
             commands: 0,
@@ -74,11 +73,21 @@ client.on('ready', async () => {
         if (plugin.textCommands) {
             for (const command of plugin.textCommands) {
                 const callback = async (ctx: TextCommandContext) => {
-                    if (await command.permissions?.apply(thisObj, [...stateObj, ctx] as any) === false) {
+                    try {
+                        if (!command.check || await command.check(ctx)) {
+                            await command.callback(ctx);
+                            return true;
+                        }
                         return false;
                     }
-                    await command.callback.apply(thisObj, [...stateObj, ctx] as any);
-                    return true;
+                    catch (e) {
+                        if ([InvalidArgumentError].some(x => e instanceof x)) {
+                            return false;
+                        }
+                        else {
+                            throw e;
+                        }
+                    }
                 };
                 for (const name of [command.commandName, ...command.aliases ?? []]) {
                     (textCommandsLookup[name] ??= []).push(callback);
@@ -91,7 +100,7 @@ client.on('ready', async () => {
         // Load event handlers
         if (plugin.eventListeners) {
             for (const eventType of Object.keys(plugin.eventListeners)) {
-                const handler = (...args: any[]) => (plugin.eventListeners as any)[eventType].apply(thisObj, [...stateObj, ...args]);
+                const handler = (...args: any[]) => (plugin.eventListeners as any)[eventType](...args);
                 client.on(eventType, handler);
                 count.eventListeners++;
             }

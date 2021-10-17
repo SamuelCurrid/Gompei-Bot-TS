@@ -3,5 +3,6 @@ declare module NodeJS {
         BOT_TOKEN?: string;
         PREFIX?: string;
         COMMAND_SHADOWING?: boolean;
+        STORAGE_PATH?: string;
     }
 }

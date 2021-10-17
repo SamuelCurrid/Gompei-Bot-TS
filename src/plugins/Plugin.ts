@@ -1,29 +1,32 @@
 import { Awaited, ClientEvents, Message } from "discord.js";
 import { GompeiClient } from "../client";
-import { Thisify } from "../util/types";
+import { ArgumentList, ParseArgumentsReturnType } from "../util/parseCommandArguments";
+import { ClearPromises } from "../util/types";
 
-export type TextCommandContext = Message;
+export interface TextCommandContext extends Message {
+    parseArguments<T extends ArgumentList>(this: TextCommandContext, ...types: T): ParseArgumentsReturnType<T>;
+    parseArgumentsAsync<T extends ArgumentList>(this: TextCommandContext, ...types: T): Promise<ClearPromises<ParseArgumentsReturnType<T>>>;
+}
 
-interface TextCommandInfo<TState, UseThis extends boolean> {
+interface TextCommandInfo {
     commandName: string;
     aliases?: string[];
     description?: string;
-    // Need to do this wonky thing with type parameters so that
-    // typescript doesn't try to use the parameter for type inference
-    permissions?: Thisify<UseThis, <T extends TState>(state: T, ctx: TextCommandContext) => Awaited<boolean>>;
-    callback: Thisify<UseThis, <T extends TState>(state: T, ctx: TextCommandContext) => Awaited<void>>;
+    check?: (ctx: TextCommandContext) => Awaited<boolean>;
+    callback(ctx: TextCommandContext): Awaited<void>;
 }
 
-export interface Plugin<TState, UseThis extends boolean = boolean> {
+export interface PluginInfo {
     name: string;
+    latch?: Promise<void>;
     description?: string;
-    useThis?: UseThis;
-    init?: (client: GompeiClient) => Awaited<TState>;
-    textCommands?: TextCommandInfo<TState, UseThis>[];
+    textCommands?: TextCommandInfo[];
     slashCommands?: never; // not yet implemented
-    eventListeners?: { [EventName in keyof ClientEvents]: (state: TState, ...args: ClientEvents[EventName]) => Awaited<void> };
+    eventListeners?: { [EventName in keyof ClientEvents]?: (...args: ClientEvents[EventName]) => Awaited<void> };
 }
 
-export function makePlugin<T, UseThis extends boolean>(plugin: Plugin<T, UseThis>) {
+export type Plugin = (client: GompeiClient) => PluginInfo;
+
+export function Plugin(plugin: Plugin) {
     return plugin;
 }
